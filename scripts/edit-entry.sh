@@ -16,7 +16,8 @@ selected=$(echo "$entries" | head -n -1 | \
     --delimiter=$'\t' \
     --with-nth=2,3,4,5 \
     --no-sort --reverse \
-    --header="Select entry to edit")
+    --header="Select entry to edit (q to quit)" \
+    --bind="q:abort")
 
 if [ -z "$selected" ]; then
     exit 0
@@ -35,13 +36,11 @@ new_hours=""
 new_notes=""
 
 while true; do
-    # Build field menu showing current (or edited) values
     display_hours="${new_hours:-$edit_hours}"
     display_project="${edit_project_code}"
     display_task="${edit_task}"
     display_notes="${new_notes:-$edit_notes}"
 
-    # Truncate notes for display
     short_notes="$display_notes"
     if [ ${#short_notes} -gt 50 ]; then
         short_notes="${short_notes:0:47}..."
@@ -52,8 +51,9 @@ while true; do
         fzf --no-sort --reverse \
             --delimiter=$'\t' \
             --with-nth=1,2 \
-            --header="Pick a field to edit" \
-            --prompt="→ ")
+            --header="Pick a field to edit (q to quit)" \
+            --prompt="→ " \
+            --bind="q:abort")
 
     if [ -z "$choice" ]; then
         exit 0
@@ -68,15 +68,16 @@ while true; do
                 continue
             fi
             project_line=$(echo "$projects_output" | fzf --prompt="Project> " \
-                --delimiter=$'\t' --with-nth=2,3 --no-sort)
+                --delimiter=$'\t' --with-nth=2,3 --no-sort \
+                --bind="q:abort")
             if [ -n "$project_line" ]; then
                 new_pid=$(echo "$project_line" | cut -f1)
                 edit_project_code=$(echo "$project_line" | cut -f2)
-                # Auto-prompt for task on new project
                 tasks_output=$("$BINARY" tasks "$new_pid" 2>/dev/null)
                 if [ -n "$tasks_output" ]; then
                     task_line=$(echo "$tasks_output" | fzf --prompt="Task> " \
-                        --delimiter=$'\t' --with-nth=2 --no-sort)
+                        --delimiter=$'\t' --with-nth=2 --no-sort \
+                        --bind="q:abort")
                     if [ -n "$task_line" ]; then
                         new_tid=$(echo "$task_line" | cut -f1)
                         edit_task=$(echo "$task_line" | cut -f2)
@@ -85,7 +86,6 @@ while true; do
             fi
             ;;
         "Task")
-            # Look up current project ID
             pid="${new_pid}"
             if [ -z "$pid" ]; then
                 pid=$(echo "$("$BINARY" projects 2>/dev/null)" | awk -F'\t' -v code="$edit_project_code" '$2 == code {print $1; exit}')
@@ -94,7 +94,8 @@ while true; do
                 tasks_output=$("$BINARY" tasks "$pid" 2>/dev/null)
                 if [ -n "$tasks_output" ]; then
                     task_line=$(echo "$tasks_output" | fzf --prompt="Task> " \
-                        --delimiter=$'\t' --with-nth=2 --no-sort)
+                        --delimiter=$'\t' --with-nth=2 --no-sort \
+                        --bind="q:abort")
                     if [ -n "$task_line" ]; then
                         new_tid=$(echo "$task_line" | cut -f1)
                         edit_task=$(echo "$task_line" | cut -f2)
@@ -103,7 +104,7 @@ while true; do
             fi
             ;;
         "Hours")
-            printf "Hours [%s]: " "$display_hours"
+            printf "Hours [%s] (e.g. 1.5, 1h30m, 90m): " "$display_hours"
             read -r input
             if [ -n "$input" ]; then
                 new_hours="$input"

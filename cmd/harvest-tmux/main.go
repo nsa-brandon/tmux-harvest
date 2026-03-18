@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -11,6 +12,31 @@ import (
 	"github.com/brandondedolph/tmux-harvest/internal/config"
 	"github.com/brandondedolph/tmux-harvest/internal/format"
 )
+
+var hoursRe = regexp.MustCompile(`^(?:(\d+)h)?(?:(\d+)m)?$`)
+
+// parseHours parses duration strings: "1.5", "1h30m", "1h", "90m"
+func parseHours(s string) (float64, error) {
+	// Try plain float first
+	if h, err := strconv.ParseFloat(s, 64); err == nil {
+		return h, nil
+	}
+	// Try XhYm format
+	m := hoursRe.FindStringSubmatch(s)
+	if m == nil || (m[1] == "" && m[2] == "") {
+		return 0, fmt.Errorf("invalid duration %q (use 1.5, 1h30m, 1h, or 90m)", s)
+	}
+	var total float64
+	if m[1] != "" {
+		h, _ := strconv.Atoi(m[1])
+		total += float64(h)
+	}
+	if m[2] != "" {
+		mins, _ := strconv.Atoi(m[2])
+		total += float64(mins) / 60.0
+	}
+	return total, nil
+}
 
 var version = "dev"
 
@@ -252,9 +278,9 @@ func cmdLog(c *api.Client) error {
 	if err != nil {
 		return fmt.Errorf("invalid task_id: %s", os.Args[3])
 	}
-	hours, err := strconv.ParseFloat(os.Args[4], 64)
+	hours, err := parseHours(os.Args[4])
 	if err != nil {
-		return fmt.Errorf("invalid hours: %s", os.Args[4])
+		return err
 	}
 	var notes string
 	for i := 5; i < len(os.Args); i++ {
@@ -302,9 +328,9 @@ func cmdEdit(c *api.Client) error {
 			fields.TaskID = &tid
 			i++
 		case "--hours":
-			h, err := strconv.ParseFloat(os.Args[i+1], 64)
+			h, err := parseHours(os.Args[i+1])
 			if err != nil {
-				return fmt.Errorf("invalid hours: %s", os.Args[i+1])
+				return err
 			}
 			fields.Hours = &h
 			i++

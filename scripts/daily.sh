@@ -17,4 +17,4 @@ fi
 echo "$entries" | cut -f2- | column -t -s $'\t' | fzf --no-sort --reverse \
     --header="Today's Time Log (Esc to close)" \
     --no-mouse \
-    --bind="enter:abort,esc:abort"
+    --bind="enter:abort,esc:abort,q:abort"

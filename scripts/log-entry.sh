@@ -13,7 +13,8 @@ fi
 project_line=$(echo "$projects_output" | fzf --prompt="Project> " \
     --delimiter=$'\t' \
     --with-nth=2,3 \
-    --no-sort)
+    --no-sort \
+    --bind="q:abort")
 
 if [ -z "$project_line" ]; then
     exit 0
@@ -32,7 +33,8 @@ fi
 task_line=$(echo "$tasks_output" | fzf --prompt="Task> " \
     --delimiter=$'\t' \
     --with-nth=2 \
-    --no-sort)
+    --no-sort \
+    --bind="q:abort")
 
 if [ -z "$task_line" ]; then
     exit 0
@@ -41,7 +43,7 @@ fi
 task_id=$(echo "$task_line" | cut -f1)
 
 # Step 3: Hours
-printf "Hours: "
+printf "Hours (e.g. 1.5, 1h30m, 90m): "
 read -r hours
 
 if [ -z "$hours" ]; then
