@@ -2,59 +2,42 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY="$(dirname "$CURRENT_DIR")/bin/harvest-tmux"
 
-# Theme — matches dotbar/ayu dark palette
-ORANGE='\033[38;2;230;126;34m'
-DIM_ORANGE='\033[38;2;139;90;43m'
-WHITE='\033[38;2;191;189;182m'
-BRIGHT='\033[1;38;2;230;230;220m'
-DIM='\033[38;2;86;91;102m'
-CYAN='\033[38;2;57;186;230m'
-GREEN='\033[38;2;166;227;161m'
-RED='\033[38;2;243;139;168m'
-YELLOW='\033[38;2;249;226;175m'
-BG_SUBTLE='\033[48;2;20;24;33m'
-RESET='\033[0m'
-BOLD='\033[1m'
-ITALIC='\033[3m'
+# Ensure UTF-8
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 
-# Box chars
-TL='╭' TR='╮' BL='╰' BR='╯' H='─' V='│' VL='├' VR='┤'
-
-W=46  # inner width
-
-hline() { printf '%*s' "$W" '' | tr ' ' "$H"; }
-padded() {
-    local text="$1" max="$2"
-    local stripped
-    stripped=$(echo -e "$text" | sed 's/\x1b\[[0-9;]*m//g')
-    local len=${#stripped}
-    local pad=$((max - len))
-    [ "$pad" -lt 0 ] && pad=0
-    printf '%s%*s' "$text" "$pad" ''
-}
+# Theme - ayu dark palette
+o='\e[38;2;230;126;34m'     # orange
+w='\e[38;2;191;189;182m'    # warm white
+b='\e[1;38;2;230;230;220m'  # bright
+d='\e[38;2;86;91;102m'      # dim
+c='\e[38;2;57;186;230m'     # cyan
+g='\e[38;2;166;227;161m'    # green
+r='\e[38;2;243;139;168m'    # red
+y='\e[38;2;249;226;175m'    # yellow
+n='\e[0m'                   # reset
 
 # Get today's entries
 entries=$("$BINARY" today 2>/dev/null)
 if [ $? -ne 0 ] || [ -z "$entries" ]; then
-    echo -e "\n  ${DIM}No entries today.${RESET}\n"
+    printf "\n  ${d}No entries today.${n}\n"
     read -rsn1
     exit 1
 fi
 
-fzf_theme="--color=fg:#BFBDB6,bg:#0B0E14,hl:#E67E22,fg+:#FFFFFF,bg+:#1A1E29,hl+:#E67E22,pointer:#E67E22,prompt:#E67E22,header:#565B66,border:#2A2E38"
+fzf_opts=(
+    --no-sort --reverse
+    --bind="q:abort"
+    --color="fg:#BFBDB6,bg:#0B0E14,hl:#E67E22,fg+:#FFFFFF,bg+:#1A1E29,hl+:#E67E22,pointer:#E67E22,prompt:#E67E22,header:#565B66"
+)
 
-# Pick entry via fzf
+# Pick entry
 selected=$(echo "$entries" | head -n -1 | \
-    fzf --prompt="  ⏱ Edit > " \
+    fzf --prompt="  Edit > " \
     --delimiter=$'\t' \
     --with-nth=2,3,4,5 \
-    --no-sort --reverse \
-    --header="Select entry to edit" \
-    --bind="q:abort" \
-    --border=rounded \
-    --margin=1,2 \
-    --padding=0,1 \
-    $fzf_theme)
+    --header="Select entry to edit  |  q quit" \
+    "${fzf_opts[@]}")
 
 if [ -z "$selected" ]; then
     exit 0
@@ -66,113 +49,104 @@ orig_project=$(echo "$selected" | cut -f3)
 orig_task=$(echo "$selected" | cut -f4)
 orig_notes=$(echo "$selected" | cut -f5)
 
-edit_project_code="$orig_project"
-edit_task="$orig_task"
+cur_project="$orig_project"
+cur_task="$orig_task"
+cur_hours="$orig_hours"
+cur_notes="$orig_notes"
 
 new_pid=""
 new_tid=""
-new_hours=""
-new_notes=""
 
-# Track which fields were modified
 mod_project=false
 mod_task=false
 mod_hours=false
 mod_notes=false
 
-field_val() {
-    local modified="$1" new_val="$2" orig_val="$3"
-    if [ "$modified" = true ]; then
-        echo -e "${YELLOW}${new_val}${RESET}"
-    else
-        echo -e "${BRIGHT}${orig_val}${RESET}"
-    fi
-}
-
-mod_marker() {
-    if [ "$1" = true ]; then
-        echo -e "${YELLOW}●${RESET}"
-    else
-        echo -e "${DIM}○${RESET}"
-    fi
-}
-
-change_count() {
+changes() {
     local n=0
-    [ "$mod_project" = true ] && ((n++))
-    [ "$mod_task" = true ] && ((n++))
-    [ "$mod_hours" = true ] && ((n++))
-    [ "$mod_notes" = true ] && ((n++))
-    echo "$n"
+    $mod_project && ((n++))
+    $mod_task && ((n++))
+    $mod_hours && ((n++))
+    $mod_notes && ((n++))
+    echo $n
 }
 
 show_menu() {
     clear
-    local d_hours d_project d_task d_notes
-    d_hours="${new_hours:-$orig_hours}"
-    d_project="${edit_project_code}"
-    d_task="${edit_task}"
-    d_notes="${new_notes:-$orig_notes}"
 
-    # Truncate notes
-    local short_notes="$d_notes"
-    if [ ${#short_notes} -gt 34 ]; then
-        short_notes="${short_notes:0:31}..."
+    local nc
+    nc=$(changes)
+
+    # Header
+    printf "\n"
+    printf "  ${o}Edit Entry${n}"
+    if [ "$nc" -gt 0 ]; then
+        printf "  ${d}|${n}  ${y}${nc} unsaved${n}"
     fi
+    printf "\n"
+    printf "  ${d}%.0s-${n}" $(seq 1 40)
+    printf "\n\n"
 
-    local changes
-    changes=$(change_count)
+    # Fields
+    local mk val
 
-    echo ""
-    echo -e "  ${DIM}${TL}$(hline)${TR}${RESET}"
-    echo -e "  ${DIM}${V}${RESET}  ${ORANGE}${BOLD}⏱ Edit Entry${RESET}$(printf '%*s' $((W - 14)) '')${DIM}${V}${RESET}"
-    echo -e "  ${DIM}${VL}$(hline)${VR}${RESET}"
-    echo ""
-    echo -e "  ${DIM}${V}${RESET}  $(mod_marker $mod_project) ${CYAN}${BOLD}1${RESET}  ${DIM}Project${RESET}  $(padded "$(field_val $mod_project "$d_project" "$d_project")" 28)  ${DIM}${V}${RESET}"
-    echo -e "  ${DIM}${V}${RESET}  $(mod_marker $mod_task) ${CYAN}${BOLD}2${RESET}  ${DIM}Task${RESET}     $(padded "$(field_val $mod_task "$d_task" "$d_task")" 28)  ${DIM}${V}${RESET}"
-    echo -e "  ${DIM}${V}${RESET}  $(mod_marker $mod_hours) ${CYAN}${BOLD}3${RESET}  ${DIM}Hours${RESET}    $(padded "$(field_val $mod_hours "$d_hours" "$d_hours")" 28)  ${DIM}${V}${RESET}"
-    echo -e "  ${DIM}${V}${RESET}  $(mod_marker $mod_notes) ${CYAN}${BOLD}4${RESET}  ${DIM}Notes${RESET}    $(padded "$(field_val $mod_notes "$short_notes" "$short_notes")" 28)  ${DIM}${V}${RESET}"
-    echo ""
-    echo -e "  ${DIM}${VL}$(hline)${VR}${RESET}"
+    # Project
+    if $mod_project; then mk="${y}*${n}"; val="${y}${cur_project}${n}"
+    else mk=" "; val="${b}${cur_project}${n}"; fi
+    printf "  ${mk} ${c}1${n}  ${d}Project${n}   ${val}\n"
 
-    if [ "$changes" -gt 0 ]; then
-        echo -e "  ${DIM}${V}${RESET}  ${GREEN}${BOLD}s${RESET} ${GREEN}Save${RESET} ${DIM}(${changes} change$([ "$changes" -ne 1 ] && echo s))${RESET}$(printf '%*s' $((W - 19 - ${#changes})) '')${RED}q${RESET} ${RED}Cancel${RESET}   ${DIM}${V}${RESET}"
+    # Task
+    if $mod_task; then mk="${y}*${n}"; val="${y}${cur_task}${n}"
+    else mk=" "; val="${b}${cur_task}${n}"; fi
+    printf "  ${mk} ${c}2${n}  ${d}Task${n}      ${val}\n"
+
+    # Hours
+    if $mod_hours; then mk="${y}*${n}"; val="${y}${cur_hours}${n}"
+    else mk=" "; val="${b}${cur_hours}${n}"; fi
+    printf "  ${mk} ${c}3${n}  ${d}Hours${n}     ${val}\n"
+
+    # Notes
+    local display_notes="$cur_notes"
+    [ ${#display_notes} -gt 50 ] && display_notes="${display_notes:0:47}..."
+    if $mod_notes; then mk="${y}*${n}"; val="${y}${display_notes}${n}"
+    else mk=" "; val="${b}${display_notes}${n}"; fi
+    printf "  ${mk} ${c}4${n}  ${d}Notes${n}     ${val}\n"
+
+    # Footer
+    printf "\n"
+    printf "  ${d}%.0s-${n}" $(seq 1 40)
+    printf "\n"
+    if [ "$nc" -gt 0 ]; then
+        printf "  ${g}s${n} ${w}save${n}    ${r}q${n} ${w}cancel${n}\n"
     else
-        echo -e "  ${DIM}${V}${RESET}  ${DIM}s Save (no changes)${RESET}$(printf '%*s' $((W - 30)) '')${RED}q${RESET} ${RED}Cancel${RESET}   ${DIM}${V}${RESET}"
+        printf "  ${d}s save${n}    ${r}q${n} ${w}cancel${n}\n"
     fi
-
-    echo -e "  ${DIM}${BL}$(hline)${BR}${RESET}"
-    echo ""
+    printf "\n"
 }
 
 while true; do
     show_menu
-    printf "  ${ORANGE}❯${RESET} "
+    printf "  ${o}>${n} "
     read -rsn1 key
 
     case "$key" in
         1)
             projects_output=$("$BINARY" projects 2>/dev/null)
-            if [ -z "$projects_output" ]; then
-                continue
-            fi
+            [ -z "$projects_output" ] && continue
             project_line=$(echo "$projects_output" | fzf --prompt="  Project > " \
-                --delimiter=$'\t' --with-nth=2,3 --no-sort \
-                --bind="q:abort" --border=rounded --margin=1,2 --padding=0,1 \
-                $fzf_theme)
+                --delimiter=$'\t' --with-nth=2,3 "${fzf_opts[@]}")
             if [ -n "$project_line" ]; then
                 new_pid=$(echo "$project_line" | cut -f1)
-                edit_project_code=$(echo "$project_line" | cut -f2)
+                cur_project=$(echo "$project_line" | cut -f2)
                 mod_project=true
+                # Auto-prompt task for new project
                 tasks_output=$("$BINARY" tasks "$new_pid" 2>/dev/null)
                 if [ -n "$tasks_output" ]; then
                     task_line=$(echo "$tasks_output" | fzf --prompt="  Task > " \
-                        --delimiter=$'\t' --with-nth=2 --no-sort \
-                        --bind="q:abort" --border=rounded --margin=1,2 --padding=0,1 \
-                        $fzf_theme)
+                        --delimiter=$'\t' --with-nth=2 "${fzf_opts[@]}")
                     if [ -n "$task_line" ]; then
                         new_tid=$(echo "$task_line" | cut -f1)
-                        edit_task=$(echo "$task_line" | cut -f2)
+                        cur_task=$(echo "$task_line" | cut -f2)
                         mod_task=true
                     fi
                 fi
@@ -181,61 +155,56 @@ while true; do
         2)
             pid="${new_pid}"
             if [ -z "$pid" ]; then
-                pid=$(echo "$("$BINARY" projects 2>/dev/null)" | awk -F'\t' -v code="$edit_project_code" '$2 == code {print $1; exit}')
+                pid=$("$BINARY" projects 2>/dev/null | awk -F'\t' -v code="$cur_project" '$2 == code {print $1; exit}')
             fi
-            if [ -n "$pid" ]; then
-                tasks_output=$("$BINARY" tasks "$pid" 2>/dev/null)
-                if [ -n "$tasks_output" ]; then
-                    task_line=$(echo "$tasks_output" | fzf --prompt="  Task > " \
-                        --delimiter=$'\t' --with-nth=2 --no-sort \
-                        --bind="q:abort" --border=rounded --margin=1,2 --padding=0,1 \
-                        $fzf_theme)
-                    if [ -n "$task_line" ]; then
-                        new_tid=$(echo "$task_line" | cut -f1)
-                        edit_task=$(echo "$task_line" | cut -f2)
-                        mod_task=true
-                    fi
-                fi
+            [ -z "$pid" ] && continue
+            tasks_output=$("$BINARY" tasks "$pid" 2>/dev/null)
+            [ -z "$tasks_output" ] && continue
+            task_line=$(echo "$tasks_output" | fzf --prompt="  Task > " \
+                --delimiter=$'\t' --with-nth=2 "${fzf_opts[@]}")
+            if [ -n "$task_line" ]; then
+                new_tid=$(echo "$task_line" | cut -f1)
+                cur_task=$(echo "$task_line" | cut -f2)
+                mod_task=true
             fi
             ;;
         3)
-            echo ""
-            printf "  ${ORANGE}Hours${RESET} ${DIM}(1.5, 1h30m, 90m)${RESET} ${ORANGE}❯${RESET} "
+            printf "\n"
+            printf "  ${d}e.g. 1.5  1h30m  90m${n}\n"
+            printf "  ${o}Hours${n} > "
             read -r input
             if [ -n "$input" ]; then
-                new_hours="$input"
+                cur_hours="$input"
                 mod_hours=true
             fi
             ;;
         4)
-            echo ""
-            printf "  ${ORANGE}Notes${RESET} ${ORANGE}❯${RESET} "
+            printf "\n"
+            printf "  ${o}Notes${n} > "
             read -r input
             if [ -n "$input" ]; then
-                new_notes="$input"
+                cur_notes="$input"
                 mod_notes=true
             fi
             ;;
         s|S)
-            args=("$BINARY" edit "$entry_id")
-            changed=false
-            [ -n "$new_pid" ] && args+=(--project "$new_pid") && changed=true
-            [ -n "$new_tid" ] && args+=(--task "$new_tid") && changed=true
-            [ -n "$new_hours" ] && args+=(--hours "$new_hours") && changed=true
-            [ -n "$new_notes" ] && args+=(--notes "$new_notes") && changed=true
-            if [ "$changed" = false ]; then
+            nc=$(changes)
+            if [ "$nc" -eq 0 ]; then
                 tmux display-message "Harvest: No changes"
                 exit 0
             fi
-            echo ""
-            echo -e "  ${DIM}Saving...${RESET}"
+            args=("$BINARY" edit "$entry_id")
+            [ -n "$new_pid" ] && args+=(--project "$new_pid")
+            [ -n "$new_tid" ] && args+=(--task "$new_tid")
+            $mod_hours && args+=(--hours "$cur_hours")
+            $mod_notes && args+=(--notes "$cur_notes")
+            printf "\n  ${d}Saving...${n}\n"
             output=$("${args[@]}" 2>&1)
             if [ $? -eq 0 ]; then
                 tmux refresh-client -S
                 tmux display-message "Harvest: $(echo "$output" | tail -1)"
             else
-                echo ""
-                echo -e "  ${RED}✗ Error:${RESET} $output"
+                printf "\n  ${r}Error:${n} $output\n"
                 read -rsn1
             fi
             exit 0
