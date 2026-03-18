@@ -3,6 +3,9 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$CURRENT_DIR")"
 BINARY="$PLUGIN_DIR/bin/harvest-tmux"
 
+harvest_config=$(tmux show-option -gqv @harvest-config)
+[ -n "$harvest_config" ] && export HARVEST_CONFIG="${harvest_config/#\~/$HOME}"
+
 color=$(tmux show-option -gqv @harvest-color)
 dim_color=$(tmux show-option -gqv @harvest-dim-color)
 color="${color:-#E67E22}"

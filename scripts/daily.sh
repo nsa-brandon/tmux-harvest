@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY="$(dirname "$CURRENT_DIR")/bin/harvest-tmux"
+harvest_config=$(tmux show-option -gqv @harvest-config)
+[ -n "$harvest_config" ] && export HARVEST_CONFIG="${harvest_config/#\~/$HOME}"
 
 entries=$("$BINARY" today 2>&1)
 if [ $? -ne 0 ]; then

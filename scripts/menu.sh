@@ -2,6 +2,8 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$CURRENT_DIR")"
 BINARY="$PLUGIN_DIR/bin/harvest-tmux"
+harvest_config=$(tmux show-option -gqv @harvest-config)
+[ -n "$harvest_config" ] && export HARVEST_CONFIG="${harvest_config/#\~/$HOME}"
 
 status=$("$BINARY" status 2>/dev/null)
 state=$(echo "$status" | cut -d' ' -f1)
