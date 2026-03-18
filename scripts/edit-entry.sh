@@ -10,7 +10,7 @@ if [ $? -ne 0 ] || [ -z "$entries" ]; then
     exit 1
 fi
 
-# Pick entry
+# Pick entry via fzf
 selected=$(echo "$entries" | head -n -1 | \
     fzf --prompt="Edit entry> " \
     --delimiter=$'\t' \
@@ -35,36 +35,37 @@ new_tid=""
 new_hours=""
 new_notes=""
 
-while true; do
+show_menu() {
+    clear
     display_hours="${new_hours:-$edit_hours}"
     display_project="${edit_project_code}"
     display_task="${edit_task}"
     display_notes="${new_notes:-$edit_notes}"
 
-    short_notes="$display_notes"
-    if [ ${#short_notes} -gt 50 ]; then
-        short_notes="${short_notes:0:47}..."
-    fi
+    echo "  Editing: ${display_project} / ${display_task} (${display_hours}h)"
+    echo ""
+    echo "  1) Project    ${display_project}"
+    echo "  2) Task       ${display_task}"
+    echo "  3) Hours      ${display_hours}"
+    echo "  4) Notes      ${display_notes}"
+    echo ""
+    echo "  s) Save"
+    echo "  q) Cancel"
+    echo ""
+}
 
-    choice=$(printf "Project\t%s\nTask\t%s\nHours\t%s\nNotes\t%s\n─\n✓ Save changes\n✗ Cancel" \
-        "$display_project" "$display_task" "$display_hours" "$short_notes" | \
-        fzf --no-sort --reverse \
-            --delimiter=$'\t' \
-            --with-nth=1,2 \
-            --header="Pick a field to edit (q to quit)" \
-            --prompt="→ " \
-            --bind="q:abort")
+while true; do
+    show_menu
+    printf "  > "
+    read -rsn1 key
 
-    if [ -z "$choice" ]; then
-        exit 0
-    fi
-
-    field=$(echo "$choice" | cut -f1)
-
-    case "$field" in
-        "Project")
+    case "$key" in
+        1)
+            echo ""
             projects_output=$("$BINARY" projects 2>/dev/null)
             if [ -z "$projects_output" ]; then
+                echo "  Error fetching projects."
+                sleep 1
                 continue
             fi
             project_line=$(echo "$projects_output" | fzf --prompt="Project> " \
@@ -73,6 +74,7 @@ while true; do
             if [ -n "$project_line" ]; then
                 new_pid=$(echo "$project_line" | cut -f1)
                 edit_project_code=$(echo "$project_line" | cut -f2)
+                # Auto-prompt for task on new project
                 tasks_output=$("$BINARY" tasks "$new_pid" 2>/dev/null)
                 if [ -n "$tasks_output" ]; then
                     task_line=$(echo "$tasks_output" | fzf --prompt="Task> " \
@@ -85,7 +87,8 @@ while true; do
                 fi
             fi
             ;;
-        "Task")
+        2)
+            echo ""
             pid="${new_pid}"
             if [ -z "$pid" ]; then
                 pid=$(echo "$("$BINARY" projects 2>/dev/null)" | awk -F'\t' -v code="$edit_project_code" '$2 == code {print $1; exit}')
@@ -103,21 +106,23 @@ while true; do
                 fi
             fi
             ;;
-        "Hours")
-            printf "Hours [%s] (e.g. 1.5, 1h30m, 90m): " "$display_hours"
+        3)
+            echo ""
+            printf "  Hours (e.g. 1.5, 1h30m, 90m): "
             read -r input
             if [ -n "$input" ]; then
                 new_hours="$input"
             fi
             ;;
-        "Notes")
-            printf "Notes [%s]: " "$display_notes"
+        4)
+            echo ""
+            printf "  Notes: "
             read -r input
             if [ -n "$input" ]; then
                 new_notes="$input"
             fi
             ;;
-        "✓ Save changes")
+        s|S)
             args=("$BINARY" edit "$entry_id")
             changed=false
             if [ -n "$new_pid" ]; then
@@ -145,13 +150,14 @@ while true; do
                 tmux refresh-client -S
                 tmux display-message "Harvest: $(echo "$output" | tail -1)"
             else
-                echo "Error: $output"
-                echo "Press enter to close."
-                read -r
+                echo ""
+                echo "  Error: $output"
+                echo "  Press any key to close."
+                read -rsn1
             fi
             exit 0
             ;;
-        "✗ Cancel")
+        q|Q)
             exit 0
             ;;
     esac
