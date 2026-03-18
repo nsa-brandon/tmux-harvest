@@ -200,6 +200,29 @@ func (c *Client) LogEntry(projectID, taskID int64, hours float64, notes string) 
 	return &entry, nil
 }
 
+type UpdateFields struct {
+	ProjectID *int64   `json:"project_id,omitempty"`
+	TaskID    *int64   `json:"task_id,omitempty"`
+	Hours     *float64 `json:"hours,omitempty"`
+	Notes     *string  `json:"notes,omitempty"`
+}
+
+func (c *Client) UpdateEntry(entryID int64, fields UpdateFields) (*TimeEntry, error) {
+	body, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling update: %w", err)
+	}
+	data, err := c.do("PATCH", fmt.Sprintf("/time_entries/%d", entryID), string(body))
+	if err != nil {
+		return nil, err
+	}
+	var entry TimeEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return nil, fmt.Errorf("parsing entry: %w", err)
+	}
+	return &entry, nil
+}
+
 func jsonString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)

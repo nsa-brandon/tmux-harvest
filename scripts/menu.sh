@@ -14,6 +14,8 @@ if [ "$state" = "running" ]; then
         "" \
         "Start new entry"   n "display-popup -E -w 60% -h 50% '$CURRENT_DIR/new-entry.sh'" \
         "Log time"          l "display-popup -E -w 60% -h 50% '$CURRENT_DIR/log-entry.sh'" \
+        "Edit entry"        e "display-popup -E -w 60% -h 60% '$CURRENT_DIR/edit-entry.sh'" \
+        "" \
         "View today's log"  v "display-popup -E -w 70% -h 50% '$CURRENT_DIR/daily.sh'"
 else
     title="Harvest Timer (stopped)"
@@ -22,5 +24,7 @@ else
         "" \
         "Start new entry"   n "display-popup -E -w 60% -h 50% '$CURRENT_DIR/new-entry.sh'" \
         "Log time"          l "display-popup -E -w 60% -h 50% '$CURRENT_DIR/log-entry.sh'" \
+        "Edit entry"        e "display-popup -E -w 60% -h 60% '$CURRENT_DIR/edit-entry.sh'" \
+        "" \
         "View today's log"  v "display-popup -E -w 70% -h 50% '$CURRENT_DIR/daily.sh'"
 fi

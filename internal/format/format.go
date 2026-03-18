@@ -22,6 +22,9 @@ func Status(running *api.TimeEntry, todayEntries []api.TimeEntry) string {
 	return fmt.Sprintf("stopped %.1f", total)
 }
 
+// TodayTSV returns today's entries as TSV lines.
+// Format: entry_id\thours\tproject_code\ttask\tnotes
+// Last line: 0\ttotal_hours\tTOTAL\t\t
 func TodayTSV(entries []api.TimeEntry) string {
 	var lines []string
 	total := 0.0
@@ -29,10 +32,10 @@ func TodayTSV(entries []api.TimeEntry) string {
 		total += e.Hours
 		notes := strings.ReplaceAll(e.Notes, "\t", " ")
 		notes = strings.ReplaceAll(notes, "\n", " ")
-		lines = append(lines, fmt.Sprintf("%.1f\t%s\t%s\t%s",
-			e.Hours, e.Project.Code, e.Task.Name, notes))
+		lines = append(lines, fmt.Sprintf("%d\t%.1f\t%s\t%s\t%s",
+			e.ID, e.Hours, e.Project.Code, e.Task.Name, notes))
 	}
-	lines = append(lines, fmt.Sprintf("%.1f\tTOTAL\t\t", total))
+	lines = append(lines, fmt.Sprintf("0\t%.1f\tTOTAL\t\t", total))
 	return strings.Join(lines, "\n")
 }
 

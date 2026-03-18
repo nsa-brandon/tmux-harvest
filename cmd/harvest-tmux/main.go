@@ -41,6 +41,8 @@ func main() {
 		run(cmdStart)
 	case "log":
 		run(cmdLog)
+	case "edit":
+		run(cmdEdit)
 	case "--version":
 		fmt.Println("harvest-tmux", version)
 	case "--help":
@@ -64,6 +66,7 @@ Commands:
   resume              Resume last entry
   start <pid> <tid>   Start new entry (-n "notes")
   log <pid> <tid> <h> Log time without timer (-n "notes")
+  edit <entry_id>     Update entry (--project, --task, --hours, --notes)
   --version           Print version
   --help              Print this help`)
 }
@@ -267,5 +270,54 @@ func cmdLog(c *api.Client) error {
 	entries, _ := c.TodayEntries()
 	cache.Set("status", &statusCache{Running: nil, Entries: entries}, statusCacheTTL)
 	fmt.Printf("Logged: %s %s (%.1fh)\n", entry.Project.Code, entry.Task.Name, entry.Hours)
+	return nil
+}
+
+func cmdEdit(c *api.Client) error {
+	if len(os.Args) < 3 {
+		return fmt.Errorf("usage: harvest-tmux edit <entry_id> [--project <pid>] [--task <tid>] [--hours <h>] [--notes <text>]")
+	}
+	entryID, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid entry_id: %s", os.Args[2])
+	}
+	var fields api.UpdateFields
+	for i := 3; i < len(os.Args); i++ {
+		if i+1 >= len(os.Args) {
+			break
+		}
+		switch os.Args[i] {
+		case "--project":
+			pid, err := strconv.ParseInt(os.Args[i+1], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid project_id: %s", os.Args[i+1])
+			}
+			fields.ProjectID = &pid
+			i++
+		case "--task":
+			tid, err := strconv.ParseInt(os.Args[i+1], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid task_id: %s", os.Args[i+1])
+			}
+			fields.TaskID = &tid
+			i++
+		case "--hours":
+			h, err := strconv.ParseFloat(os.Args[i+1], 64)
+			if err != nil {
+				return fmt.Errorf("invalid hours: %s", os.Args[i+1])
+			}
+			fields.Hours = &h
+			i++
+		case "--notes":
+			fields.Notes = &os.Args[i+1]
+			i++
+		}
+	}
+	entry, err := c.UpdateEntry(entryID, fields)
+	if err != nil {
+		return err
+	}
+	cache.Invalidate("status")
+	fmt.Printf("Updated: %s %s (%.1fh)\n", entry.Project.Code, entry.Task.Name, entry.Hours)
 	return nil
 }
