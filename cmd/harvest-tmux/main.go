@@ -39,6 +39,8 @@ func main() {
 		run(cmdResume)
 	case "start":
 		run(cmdStart)
+	case "log":
+		run(cmdLog)
 	case "--version":
 		fmt.Println("harvest-tmux", version)
 	case "--help":
@@ -61,6 +63,7 @@ Commands:
   stop                Stop running timer
   resume              Resume last entry
   start <pid> <tid>   Start new entry (-n "notes")
+  log <pid> <tid> <h> Log time without timer (-n "notes")
   --version           Print version
   --help              Print this help`)
 }
@@ -231,5 +234,38 @@ func cmdStart(c *api.Client) error {
 	entries, _ := c.TodayEntries()
 	cache.Set("status", &statusCache{Running: entry, Entries: entries}, statusCacheTTL)
 	fmt.Printf("Started: %s %s\n", entry.Project.Code, entry.Task.Name)
+	return nil
+}
+
+func cmdLog(c *api.Client) error {
+	if len(os.Args) < 5 {
+		return fmt.Errorf("usage: harvest-tmux log <project_id> <task_id> <hours> [-n \"notes\"]")
+	}
+	pid, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid project_id: %s", os.Args[2])
+	}
+	tid, err := strconv.ParseInt(os.Args[3], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid task_id: %s", os.Args[3])
+	}
+	hours, err := strconv.ParseFloat(os.Args[4], 64)
+	if err != nil {
+		return fmt.Errorf("invalid hours: %s", os.Args[4])
+	}
+	var notes string
+	for i := 5; i < len(os.Args); i++ {
+		if os.Args[i] == "-n" && i+1 < len(os.Args) {
+			notes = os.Args[i+1]
+			break
+		}
+	}
+	entry, err := c.LogEntry(pid, tid, hours, notes)
+	if err != nil {
+		return err
+	}
+	entries, _ := c.TodayEntries()
+	cache.Set("status", &statusCache{Running: nil, Entries: entries}, statusCacheTTL)
+	fmt.Printf("Logged: %s %s (%.1fh)\n", entry.Project.Code, entry.Task.Name, entry.Hours)
 	return nil
 }

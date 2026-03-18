@@ -185,6 +185,21 @@ func (c *Client) CreateEntry(projectID, taskID int64, notes string) (*TimeEntry,
 	return &entry, nil
 }
 
+func (c *Client) LogEntry(projectID, taskID int64, hours float64, notes string) (*TimeEntry, error) {
+	today := time.Now().Format("2006-01-02")
+	body := fmt.Sprintf(`{"project_id":%d,"task_id":%d,"spent_date":"%s","hours":%g,"notes":%s}`,
+		projectID, taskID, today, hours, jsonString(notes))
+	data, err := c.do("POST", "/time_entries", body)
+	if err != nil {
+		return nil, err
+	}
+	var entry TimeEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return nil, fmt.Errorf("parsing entry: %w", err)
+	}
+	return &entry, nil
+}
+
 func jsonString(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)

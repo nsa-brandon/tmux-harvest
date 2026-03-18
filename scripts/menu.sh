@@ -13,6 +13,7 @@ if [ "$state" = "running" ]; then
         "Stop timer"        s "run-shell '$CURRENT_DIR/stop.sh'" \
         "" \
         "Start new entry"   n "display-popup -E -w 60% -h 50% '$CURRENT_DIR/new-entry.sh'" \
+        "Log time"          l "display-popup -E -w 60% -h 50% '$CURRENT_DIR/log-entry.sh'" \
         "View today's log"  v "display-popup -E -w 70% -h 50% '$CURRENT_DIR/daily.sh'"
 else
     title="Harvest Timer (stopped)"
@@ -20,5 +21,6 @@ else
         "Resume last entry" r "run-shell '$CURRENT_DIR/resume.sh'" \
         "" \
         "Start new entry"   n "display-popup -E -w 60% -h 50% '$CURRENT_DIR/new-entry.sh'" \
+        "Log time"          l "display-popup -E -w 60% -h 50% '$CURRENT_DIR/log-entry.sh'" \
         "View today's log"  v "display-popup -E -w 70% -h 50% '$CURRENT_DIR/daily.sh'"
 fi
