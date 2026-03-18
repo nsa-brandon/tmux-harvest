@@ -3,9 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"time"
+
+	"github.com/brandondedolph/tmux-harvest/internal/api"
+	"github.com/brandondedolph/tmux-harvest/internal/cache"
+	"github.com/brandondedolph/tmux-harvest/internal/config"
+	"github.com/brandondedolph/tmux-harvest/internal/format"
 )
 
 var version = "dev"
+
+const (
+	statusCacheTTL  = 30 * time.Second
+	projectCacheTTL = 5 * time.Minute
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -14,19 +26,19 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "status":
-		cmdStatus()
+		run(cmdStatus)
 	case "today":
-		cmdToday()
+		run(cmdToday)
 	case "projects":
-		cmdProjects()
+		run(cmdProjects)
 	case "tasks":
-		cmdTasks()
+		run(cmdTasks)
 	case "stop":
-		cmdStop()
+		run(cmdStop)
 	case "resume":
-		cmdResume()
+		run(cmdResume)
 	case "start":
-		cmdStart()
+		run(cmdStart)
 	case "--version":
 		fmt.Println("harvest-tmux", version)
 	case "--help":
@@ -53,10 +65,171 @@ Commands:
   --help              Print this help`)
 }
 
-func cmdStatus()   { fmt.Println("stopped 0.0") }
-func cmdToday()    {}
-func cmdProjects() {}
-func cmdTasks()    {}
-func cmdStop()     { fmt.Fprintln(os.Stderr, "not implemented") }
-func cmdResume()   { fmt.Fprintln(os.Stderr, "not implemented") }
-func cmdStart()    { fmt.Fprintln(os.Stderr, "not implemented") }
+type clientFunc func(c *api.Client) error
+
+func run(fn clientFunc) {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+		os.Exit(1)
+	}
+	client := api.NewClient(cfg)
+	if err := fn(client); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+type statusCache struct {
+	Running *api.TimeEntry  `json:"running"`
+	Entries []api.TimeEntry `json:"entries"`
+}
+
+func fetchStatus(c *api.Client) (*statusCache, error) {
+	var sc statusCache
+	if cache.Get("status", &sc) {
+		return &sc, nil
+	}
+	running, err := c.RunningTimer()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := c.TodayEntries()
+	if err != nil {
+		return nil, err
+	}
+	sc = statusCache{Running: running, Entries: entries}
+	cache.Set("status", &sc, statusCacheTTL)
+	return &sc, nil
+}
+
+func cmdStatus(c *api.Client) error {
+	sc, err := fetchStatus(c)
+	if err != nil {
+		fmt.Println("error --")
+		return nil
+	}
+	fmt.Println(format.Status(sc.Running, sc.Entries))
+	return nil
+}
+
+func cmdToday(c *api.Client) error {
+	sc, err := fetchStatus(c)
+	if err != nil {
+		return err
+	}
+	out := format.TodayTSV(sc.Entries)
+	if out != "" {
+		fmt.Println(out)
+	}
+	return nil
+}
+
+func cmdProjects(c *api.Client) error {
+	assignments, err := getAssignments(c)
+	if err != nil {
+		return err
+	}
+	fmt.Println(format.ProjectsTSV(assignments))
+	return nil
+}
+
+func getAssignments(c *api.Client) ([]api.ProjectAssignment, error) {
+	var assignments []api.ProjectAssignment
+	if cache.Get("projects", &assignments) {
+		return assignments, nil
+	}
+	var err error
+	assignments, err = c.ProjectAssignments()
+	if err != nil {
+		return nil, err
+	}
+	cache.Set("projects", assignments, projectCacheTTL)
+	return assignments, nil
+}
+
+func cmdTasks(c *api.Client) error {
+	if len(os.Args) < 3 {
+		return fmt.Errorf("usage: harvest-tmux tasks <project_id>")
+	}
+	pid, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid project_id: %s", os.Args[2])
+	}
+	assignments, err := getAssignments(c)
+	if err != nil {
+		return err
+	}
+	for _, a := range assignments {
+		if a.Project.ID == pid {
+			fmt.Println(format.TasksTSV(&a))
+			return nil
+		}
+	}
+	return fmt.Errorf("project %d not found in assignments", pid)
+}
+
+func cmdStop(c *api.Client) error {
+	running, err := c.RunningTimer()
+	if err != nil {
+		return err
+	}
+	if running == nil {
+		return fmt.Errorf("no running timer")
+	}
+	stopped, err := c.StopTimer(running.ID)
+	if err != nil {
+		return err
+	}
+	entries, _ := c.TodayEntries()
+	cache.Set("status", &statusCache{Running: nil, Entries: entries}, statusCacheTTL)
+	fmt.Printf("Stopped: %s %s (%.1fh)\n", stopped.Project.Code, stopped.Task.Name, stopped.Hours)
+	return nil
+}
+
+func cmdResume(c *api.Client) error {
+	entries, err := c.TodayEntries()
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("no entries today to resume")
+	}
+	last := entries[0]
+	restarted, err := c.RestartTimer(last.ID)
+	if err != nil {
+		return err
+	}
+	cache.Set("status", &statusCache{Running: restarted, Entries: entries}, statusCacheTTL)
+	fmt.Printf("Resumed: %s %s\n", restarted.Project.Code, restarted.Task.Name)
+	return nil
+}
+
+func cmdStart(c *api.Client) error {
+	if len(os.Args) < 4 {
+		return fmt.Errorf("usage: harvest-tmux start <project_id> <task_id> [-n \"notes\"]")
+	}
+	pid, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid project_id: %s", os.Args[2])
+	}
+	tid, err := strconv.ParseInt(os.Args[3], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid task_id: %s", os.Args[3])
+	}
+	var notes string
+	for i := 4; i < len(os.Args); i++ {
+		if os.Args[i] == "-n" && i+1 < len(os.Args) {
+			notes = os.Args[i+1]
+			break
+		}
+	}
+	entry, err := c.CreateEntry(pid, tid, notes)
+	if err != nil {
+		return err
+	}
+	entries, _ := c.TodayEntries()
+	cache.Set("status", &statusCache{Running: entry, Entries: entries}, statusCacheTTL)
+	fmt.Printf("Started: %s %s\n", entry.Project.Code, entry.Task.Name)
+	return nil
+}
