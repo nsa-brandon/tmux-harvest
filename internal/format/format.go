@@ -3,6 +3,7 @@ package format
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/brandondedolph/tmux-harvest/internal/api"
@@ -36,8 +37,13 @@ func TodayTSV(entries []api.TimeEntry) string {
 }
 
 func ProjectsTSV(assignments []api.ProjectAssignment) string {
+	sorted := make([]api.ProjectAssignment, len(assignments))
+	copy(sorted, assignments)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Project.Code < sorted[j].Project.Code
+	})
 	var lines []string
-	for _, a := range assignments {
+	for _, a := range sorted {
 		lines = append(lines, fmt.Sprintf("%d\t%s\t%s",
 			a.Project.ID, a.Project.Code, a.Project.Name))
 	}
