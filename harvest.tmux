@@ -21,5 +21,11 @@ fi
 harvest_key=$(tmux show-option -gqv @harvest-key)
 harvest_key="${harvest_key:-H}"
 
+# Config file path (exported so all scripts/binary inherit it)
+harvest_config=$(tmux show-option -gqv @harvest-config)
+if [ -n "$harvest_config" ]; then
+    tmux set-environment -g HARVEST_CONFIG "$harvest_config"
+fi
+
 # Bind prefix + key to menu
 tmux bind-key "$harvest_key" run-shell "$CURRENT_DIR/scripts/menu.sh"

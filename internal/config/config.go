@@ -13,12 +13,17 @@ type Config struct {
 	APIToken  string
 }
 
+func DefaultPath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "harvest", "config.ini")
+}
+
 func Load() (*Config, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("cannot find home directory: %w", err)
+	path := os.Getenv("HARVEST_CONFIG")
+	if path == "" {
+		path = DefaultPath()
 	}
-	return LoadFromPath(filepath.Join(home, "Harvest_Invoice", "invoice.ini"))
+	return LoadFromPath(path)
 }
 
 func LoadFromPath(path string) (*Config, error) {

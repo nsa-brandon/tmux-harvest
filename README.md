@@ -53,7 +53,7 @@ run-shell ~/.tmux/plugins/tmux-harvest/harvest.tmux
 
 ### Harvest credentials
 
-Create `~/Harvest_Invoice/invoice.ini`:
+Create `~/.config/harvest/config.ini` (default location):
 
 ```ini
 [Harvest]
@@ -61,11 +61,20 @@ account_id = YOUR_ACCOUNT_ID
 api_token = YOUR_API_TOKEN
 ```
 
+To use a different path, set the `@harvest-config` tmux option or the `HARVEST_CONFIG` environment variable:
+
+```bash
+set -g @harvest-config '~/path/to/config.ini'
+```
+
 ### tmux options
 
 ```bash
 # Keybinding (default: H)
 set -g @harvest-key 'H'
+
+# Config file path (default: ~/.config/harvest/config.ini)
+set -g @harvest-config '/path/to/config.ini'
 
 # Colors
 set -g @harvest-color '#E67E22'       # running timer color
