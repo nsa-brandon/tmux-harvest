@@ -9,6 +9,15 @@ import (
 	"github.com/brandondedolph/tmux-harvest/internal/api"
 )
 
+// FmtHours formats hours to up to 2 decimal places, trimming trailing zeros.
+// 1.25 → "1.25", 1.20 → "1.2", 1.00 → "1"
+func FmtHours(h float64) string {
+	s := fmt.Sprintf("%.2f", h)
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	return s
+}
+
 func Status(running *api.TimeEntry, todayEntries []api.TimeEntry) string {
 	total := 0.0
 	for _, e := range todayEntries {
@@ -19,7 +28,7 @@ func Status(running *api.TimeEntry, todayEntries []api.TimeEntry) string {
 		m := int(math.Round((running.Hours - float64(h)) * 60))
 		return fmt.Sprintf("running %d:%02d", h, m)
 	}
-	return fmt.Sprintf("stopped %.1f", total)
+	return fmt.Sprintf("stopped %s", FmtHours(total))
 }
 
 // TodayTSV returns today's entries as TSV lines.
@@ -32,10 +41,10 @@ func TodayTSV(entries []api.TimeEntry) string {
 		total += e.Hours
 		notes := strings.ReplaceAll(e.Notes, "\t", " ")
 		notes = strings.ReplaceAll(notes, "\n", " ")
-		lines = append(lines, fmt.Sprintf("%d\t%.1f\t%s\t%s\t%s",
-			e.ID, e.Hours, e.Project.Code, e.Task.Name, notes))
+		lines = append(lines, fmt.Sprintf("%d\t%s\t%s\t%s\t%s",
+			e.ID, FmtHours(e.Hours), e.Project.Code, e.Task.Name, notes))
 	}
-	lines = append(lines, fmt.Sprintf("0\t%.1f\tTOTAL\t\t", total))
+	lines = append(lines, fmt.Sprintf("0\t%s\tTOTAL\t\t", FmtHours(total)))
 	return strings.Join(lines, "\n")
 }
 

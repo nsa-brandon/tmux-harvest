@@ -215,7 +215,7 @@ func cmdStop(c *api.Client) error {
 	}
 	entries, _ := c.TodayEntries()
 	cache.Set("status", &statusCache{Running: nil, Entries: entries}, statusCacheTTL)
-	fmt.Printf("Stopped: %s %s (%.1fh)\n", stopped.Project.Code, stopped.Task.Name, stopped.Hours)
+	fmt.Printf("Stopped: %s %s (%sh)\n", stopped.Project.Code, stopped.Task.Name, format.FmtHours(stopped.Hours))
 	return nil
 }
 
@@ -295,7 +295,7 @@ func cmdLog(c *api.Client) error {
 	}
 	entries, _ := c.TodayEntries()
 	cache.Set("status", &statusCache{Running: nil, Entries: entries}, statusCacheTTL)
-	fmt.Printf("Logged: %s %s (%.1fh)\n", entry.Project.Code, entry.Task.Name, entry.Hours)
+	fmt.Printf("Logged: %s %s (%sh)\n", entry.Project.Code, entry.Task.Name, format.FmtHours(entry.Hours))
 	return nil
 }
 
@@ -344,6 +344,6 @@ func cmdEdit(c *api.Client) error {
 		return err
 	}
 	cache.Invalidate("status")
-	fmt.Printf("Updated: %s %s (%.1fh)\n", entry.Project.Code, entry.Task.Name, entry.Hours)
+	fmt.Printf("Updated: %s %s (%sh)\n", entry.Project.Code, entry.Task.Name, format.FmtHours(entry.Hours))
 	return nil
 }
